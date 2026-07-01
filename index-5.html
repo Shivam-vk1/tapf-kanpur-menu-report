@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TAPF Kanpur — Daily Menu Report Generator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  :root{
+    /* --- App chrome palette (modernized) --- */
+    --bg:#F3F5F4;
+    --surface:#FFFFFF;
+    --ink:#16201A;
+    --muted:#6B7570;
+    --line:#E4E8E5;
+    --accent:#2E7D4F;
+    --accent-dark:#1F5C39;
+    --accent-soft:#EAF4EE;
+    --radius:14px;
+    --shadow:0 1px 2px rgba(16,24,20,0.04), 0 8px 24px rgba(16,24,20,0.06);
+
+    /* --- Official report palette (kept exactly as source Excel format) --- */
+    --report-green:#7CB342;
+    --report-yellow:#F5E400;
+    --report-cell:#D9D9D9;
+    --report-border:#333;
+  }
+  *{box-sizing:border-box;}
+  html{-webkit-text-size-adjust:100%;}
+  body{
+    margin:0;
+    font-family:'Inter', 'Segoe UI', Arial, sans-serif;
+    background:var(--bg);
+    color:var(--ink);
+    -webkit-font-smoothing:antialiased;
+  }
+  header{
+    background:var(--accent-dark);
+    color:#fff;
+    padding:20px clamp(16px,4vw,32px);
+  }
+  header h1{margin:0;font-size:clamp(17px,2.4vw,21px);font-weight:700;letter-spacing:-0.01em;}
+  header p{margin:4px 0 0;font-size:13px;color:#CFE6D9;}
+
+  .layout{
+    display:grid;
+    grid-template-columns: minmax(300px,360px) 1fr;
+    gap:20px;
+    padding:clamp(14px,3vw,28px);
+    align-items:start;
+    max-width:1240px;
+    margin:0 auto;
+  }
+  @media(max-width:960px){
+    .layout{grid-template-columns:1fr; padding:16px;}
+  }
+
+  .panel{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:20px;
+    box-shadow:var(--shadow);
+  }
+  @media(min-width:961px){
+    .panel{position:sticky; top:20px; max-height:calc(100vh - 40px); overflow-y:auto;}
+  }
+  .panel h2{
+    font-size:14px;
+    font-weight:700;
+    margin:0 0 16px;
+    color:var(--accent-dark);
+    text-transform:uppercase;
+    letter-spacing:0.04em;
+  }
+  .field{margin-bottom:13px;}
+  .field label{
+    display:block;
+    font-size:12.5px;
+    font-weight:600;
+    margin-bottom:5px;
+    color:var(--muted);
+  }
+  .field input[type=text],
+  .field input[type=number],
+  .field input[type=date]{
+    width:100%;
+    padding:10px 11px;
+    border:1.5px solid var(--line);
+    border-radius:9px;
+    font-size:14px;
+    font-family:inherit;
+    color:var(--ink);
+    background:#fbfcfb;
+    transition:border-color .15s, background .15s;
+  }
+  .field input[type=text]:focus,
+  .field input[type=number]:focus,
+  .field input[type=date]:focus{
+    outline:none;
+    border-color:var(--accent);
+    background:#fff;
+  }
+  .file-input{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    position:relative;
+  }
+  .file-input label.file-btn{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    padding:8px 12px;
+    background:var(--accent-soft);
+    color:var(--accent-dark);
+    border-radius:8px;
+    font-size:12.5px;
+    font-weight:600;
+    cursor:pointer;
+    white-space:nowrap;
+    transition:background .15s;
+  }
+  .file-input label.file-btn:hover{background:#DCEFE3;}
+  .file-input input[type=file]{
+    position:absolute;
+    width:1px;height:1px;
+    opacity:0;
+    overflow:hidden;
+  }
+  .file-input .file-name{
+    font-size:12px;
+    color:var(--muted);
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .item-block{
+    border:1px solid var(--line);
+    border-radius:11px;
+    padding:14px;
+    margin-bottom:14px;
+    background:#fbfcfb;
+  }
+  .item-block h3{
+    margin:0 0 10px;
+    font-size:12.5px;
+    font-weight:700;
+    color:var(--accent-dark);
+    text-transform:uppercase;
+    letter-spacing:0.03em;
+  }
+  .row-2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .thumb-wrap{
+    margin-top:8px;
+    width:100%;
+    aspect-ratio:16/9;
+    border-radius:8px;
+    overflow:hidden;
+    border:1px solid var(--line);
+    background:#eef0ee;
+    display:none;
+  }
+  .thumb-wrap img{
+    width:100%;
+    height:100%;
+    object-fit:cover;
+    display:block;
+  }
+  .btn{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    width:100%;
+    padding:11px 12px;
+    border:none;
+    border-radius:9px;
+    font-size:13.5px;
+    font-weight:600;
+    font-family:inherit;
+    cursor:pointer;
+    margin-top:6px;
+    transition:transform .1s, background .15s, box-shadow .15s;
+  }
+  .btn:active{transform:scale(0.98);}
+  .btn-primary{background:var(--accent); color:#fff; box-shadow:0 2px 6px rgba(46,125,79,0.25);}
+  .btn-primary:hover{background:var(--accent-dark);}
+  .btn-outline{background:#fff; color:var(--accent-dark); border:1.5px solid var(--line);}
+  .btn-outline:hover{border-color:var(--accent); background:var(--accent-soft);}
+
+  .preview-stack{display:flex;flex-direction:column;gap:22px;}
+  .preview-card{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:18px;
+    box-shadow:var(--shadow);
+  }
+  .preview-card .card-label{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-size:12px;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:0.04em;
+    color:var(--muted);
+    margin-bottom:12px;
+  }
+  .card-label .dot{
+    width:7px;height:7px;border-radius:50%;
+    background:var(--accent);
+    flex-shrink:0;
+  }
+  .report-scroll{
+    width:100%;
+    overflow-x:auto;
+    border-radius:8px;
+  }
+  .download-row{display:flex;gap:8px;margin-top:14px;}
+  .download-row .btn{margin-top:0;}
+
+  /* ---- Report table: kept visually identical to the official Excel format ---- */
+  .report{
+    width:100%;
+    max-width:640px;
+    margin:0 auto;
+    border-collapse:collapse;
+    font-family:Arial, sans-serif;
+    background:#fff;
+  }
+  .report td, .report th{
+    border:1px solid var(--report-border);
+    padding:6px 8px;
+    font-size:13px;
+    text-align:center;
+    vertical-align:middle;
+  }
+  .report .title-row td{
+    background:var(--report-green);
+    color:#111;
+    font-weight:800;
+    font-size:15px;
+    letter-spacing:0.3px;
+    padding:10px;
+  }
+  .report .item-header td{
+    background:var(--report-cell);
+    font-weight:800;
+    font-size:13px;
+  }
+  .report .photo-cell{
+    padding:4px;
+    background:#fff;
+  }
+  .report .photo-cell img{
+    display:block;
+    width:100%;
+    aspect-ratio:4/3;
+    height:auto;
+    object-fit:cover;
+    border-radius:2px;
+  }
+  .report .photo-pair{
+    display:flex;
+    gap:4px;
+  }
+  .report .photo-pair > *{
+    width:50%;
+  }
+  .report .photo-pair img{
+    display:block;
+    width:100%;
+    aspect-ratio:4/3;
+    height:auto;
+    object-fit:cover;
+  }
+  .report .extra-item-note{
+    font-size:10px;
+    font-style:italic;
+    color:#555;
+    margin-top:2px;
+  }
+  .report .label-cell{
+    background:var(--report-cell);
+    font-weight:700;
+    text-align:center;
+  }
+  .report .value-cell{
+    background:#fff;
+    font-weight:700;
+  }
+  .report .caul-header td{
+    background:var(--report-yellow);
+    font-weight:800;
+    letter-spacing:0.4px;
+  }
+  .report .caul-num{
+    background:var(--report-cell);
+    font-weight:700;
+    width:8%;
+  }
+  .report .caul-name{
+    background:var(--report-cell);
+    font-weight:700;
+    text-align:left;
+    padding-left:12px;
+  }
+  .report .caul-val{
+    background:#fff;
+    font-weight:700;
+  }
+  .placeholder-photo{
+    width:100%;
+    aspect-ratio:4/3;
+    background:#eaeaea;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color:#999;
+    font-size:11px;
+    border-radius:2px;
+  }
+  footer{
+    text-align:center;
+    font-size:11.5px;
+    color:var(--muted);
+    padding:24px 16px 32px;
+  }
+
+  @media(max-width:480px){
+    .report td, .report th{padding:4px 5px; font-size:11px;}
+    .report .title-row td{font-size:12.5px; padding:8px;}
+    .row-2{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>The Akshaya Patra Foundation — Kanpur</h1>
+  <p>Daily Menu Report Generator (replaces manual Excel entry)</p>
+</header>
+
+<div class="layout">
+
+  <!-- ============ FORM PANEL ============ -->
+  <div class="panel">
+    <h2>Report Details</h2>
+
+    <div class="field">
+      <label>Date</label>
+      <input type="date" id="reportDate">
+    </div>
+
+    <div class="field">
+      <label>Yesterday Attendance</label>
+      <input type="number" id="yestAttendance" placeholder="e.g. 1503">
+    </div>
+
+    <div class="field">
+      <label>Projected Meal Count</label>
+      <input type="number" id="projMeal" placeholder="e.g. 1026">
+    </div>
+
+    <div class="row-2">
+      <div class="field">
+        <label>PS</label>
+        <input type="number" id="psCount" placeholder="e.g. 795">
+      </div>
+      <div class="field">
+        <label>UPS</label>
+        <input type="number" id="upsCount" placeholder="e.g. 231">
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Total No. of Schools</label>
+      <input type="number" id="schoolCount" placeholder="e.g. 129">
+    </div>
+
+    <hr style="margin:16px 0;border:none;border-top:1px solid #eee;">
+
+    <div class="item-block">
+      <h3>Item 1 (required)</h3>
+      <div class="field">
+        <label>Item Name</label>
+        <input type="text" id="item1Name" placeholder="e.g. JEERA RICE">
+      </div>
+      <div class="field">
+        <label>Cauldron No.</label>
+        <input type="text" id="item1Cauldron" placeholder="e.g. 0.94">
+      </div>
+      <div class="field">
+        <label>Photo</label>
+        <div class="file-input">
+          <label class="file-btn" for="item1Photo">Choose photo</label>
+          <span class="file-name" id="item1FileName">No file chosen</span>
+          <input type="file" accept="image/*" id="item1Photo">
+        </div>
+        <div class="thumb-wrap" id="item1ThumbWrap"><img id="item1Thumb"></div>
+      </div>
+    </div>
+
+    <div class="item-block">
+      <h3>Item 2 (required)</h3>
+      <div class="field">
+        <label>Item Name</label>
+        <input type="text" id="item2Name" placeholder="e.g. MIX DAL">
+      </div>
+      <div class="field">
+        <label>Cauldron No.</label>
+        <input type="text" id="item2Cauldron" placeholder="e.g. 0.47">
+      </div>
+      <div class="field">
+        <label>Photo</label>
+        <div class="file-input">
+          <label class="file-btn" for="item2Photo">Choose photo</label>
+          <span class="file-name" id="item2FileName">No file chosen</span>
+          <input type="file" accept="image/*" id="item2Photo">
+        </div>
+        <div class="thumb-wrap" id="item2ThumbWrap"><img id="item2Thumb"></div>
+      </div>
+    </div>
+
+    <div class="item-block">
+      <h3>Item 3 (optional — e.g. banana/fruit)</h3>
+      <div class="field">
+        <label>Item Name</label>
+        <input type="text" id="item3Name" placeholder="e.g. BANANA">
+      </div>
+      <div class="field">
+        <label>Cauldron No. (leave blank if not applicable)</label>
+        <input type="text" id="item3Cauldron" placeholder="optional">
+      </div>
+      <div class="field">
+        <label>Photo</label>
+        <div class="file-input">
+          <label class="file-btn" for="item3Photo">Choose photo</label>
+          <span class="file-name" id="item3FileName">No file chosen</span>
+          <input type="file" accept="image/*" id="item3Photo">
+        </div>
+        <div class="thumb-wrap" id="item3ThumbWrap"><img id="item3Thumb"></div>
+      </div>
+    </div>
+
+    <p style="font-size:11px;color:#888;margin-top:10px;">
+      Fill this once — both report versions below update automatically and can be downloaded as PNG or PDF.
+    </p>
+  </div>
+
+  <!-- ============ PREVIEW PANEL ============ -->
+  <div class="preview-stack">
+
+    <div class="preview-card">
+      <div class="card-label">Version A — Full report (includes Yesterday Attendance)</div>
+      <div id="captureA">
+        <table class="report" id="reportA"></table>
+      </div>
+      <div class="download-row">
+        <button class="btn btn-primary" onclick="downloadPNG('captureA','TAPF_Report_Full')">Download PNG</button>
+        <button class="btn btn-outline" onclick="downloadPDF('captureA','TAPF_Report_Full')">Download PDF</button>
+      </div>
+    </div>
+
+    <div class="preview-card">
+      <div class="card-label">Version B — Attendance hidden</div>
+      <div id="captureB">
+        <table class="report" id="reportB"></table>
+      </div>
+      <div class="download-row">
+        <button class="btn btn-primary" onclick="downloadPNG('captureB','TAPF_Report_Hidden')">Download PNG</button>
+        <button class="btn btn-outline" onclick="downloadPDF('captureB','TAPF_Report_Hidden')">Download PDF</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<footer>Internal tool — The Akshaya Patra Foundation, Kanpur Kitchen Unit. Host this file via GitHub Pages for a shareable link.</footer>
+
+<script>
+// ---------- helpers ----------
+function fmtDate(iso){
+  if(!iso) return '';
+  const d = new Date(iso + 'T00:00:00');
+  const dd = String(d.getDate()).padStart(2,'0');
+  const mmm = d.toLocaleString('en-US',{month:'short'});
+  const yy = String(d.getFullYear()).slice(-2);
+  return `${dd}-${mmm}-${yy}`;
+}
+
+function photoTag(dataUrl, altText){
+  if(dataUrl){
+    return `<img src="${dataUrl}" alt="${altText}">`;
+  }
+  return `<div class="placeholder-photo">No photo uploaded</div>`;
+}
+
+// store base64 of each uploaded photo
+const photoData = {item1:null, item2:null, item3:null};
+
+['item1','item2','item3'].forEach(key=>{
+  document.getElementById(key+'Photo').addEventListener('change', function(e){
+    const file = e.target.files[0];
+    const nameEl = document.getElementById(key+'FileName');
+    if(!file) {
+      photoData[key]=null;
+      nameEl.textContent = 'No file chosen';
+      document.getElementById(key+'ThumbWrap').style.display='none';
+      render();
+      return;
+    }
+    nameEl.textContent = file.name;
+    const reader = new FileReader();
+    reader.onload = function(ev){
+      photoData[key] = ev.target.result;
+      const thumb = document.getElementById(key+'Thumb');
+      thumb.src = ev.target.result;
+      document.getElementById(key+'ThumbWrap').style.display = 'block';
+      render();
+    };
+    reader.readAsDataURL(file);
+  });
+});
+
+// re-render on any input change
+document.querySelectorAll('input[type=text], input[type=number], input[type=date]').forEach(el=>{
+  el.addEventListener('input', render);
+});
+
+function buildReportHTML(showAttendance){
+  const date = fmtDate(document.getElementById('reportDate').value) || '—';
+  const yest = document.getElementById('yestAttendance').value || '—';
+  const proj = document.getElementById('projMeal').value || '—';
+  const ps = document.getElementById('psCount').value || '—';
+  const ups = document.getElementById('upsCount').value || '—';
+  const schools = document.getElementById('schoolCount').value || '—';
+
+  const i1Name = (document.getElementById('item1Name').value || 'ITEM 1').toUpperCase();
+  const i2Name = (document.getElementById('item2Name').value || 'ITEM 2').toUpperCase();
+  const i3Name = (document.getElementById('item3Name').value || '').toUpperCase();
+  const i1Caul = document.getElementById('item1Cauldron').value || '—';
+  const i2Caul = document.getElementById('item2Cauldron').value || '—';
+  const i3Caul = document.getElementById('item3Cauldron').value;
+
+  let menu = [i1Name, i2Name];
+  if(i3Name) menu.push(i3Name);
+  menu = menu.join(' + ');
+
+  // photo cell for column 2: if item3 present, show two photos side by side
+  let col2PhotoCell;
+  if(i3Name && photoData.item3){
+    col2PhotoCell = `<div class="photo-pair">${photoTag(photoData.item2,i2Name)}${photoTag(photoData.item3,i3Name)}</div>`;
+  } else {
+    col2PhotoCell = photoTag(photoData.item2, i2Name);
+  }
+
+  let extraNote = i3Name ? `<div class="extra-item-note">+ ${i3Name}</div>` : '';
+
+  let caulRows = `
+    <tr>
+      <td class="caul-num">1</td>
+      <td class="caul-name">${i1Name}</td>
+      <td class="caul-val">${i1Caul}</td>
+    </tr>
+    <tr>
+      <td class="caul-num">2</td>
+      <td class="caul-name">${i2Name}</td>
+      <td class="caul-val">${i2Caul}</td>
+    </tr>`;
+  if(i3Name && i3Caul){
+    caulRows += `
+    <tr>
+      <td class="caul-num">3</td>
+      <td class="caul-name">${i3Name}</td>
+      <td class="caul-val">${i3Caul}</td>
+    </tr>`;
+  }
+
+  let attendanceRow = showAttendance ? `
+    <tr>
+      <td colspan="2" class="label-cell">YESTERDAY ATTENDANCE</td>
+      <td class="value-cell">${yest}</td>
+    </tr>` : '';
+
+  return `
+    <tr class="title-row"><td colspan="3">THE AKSHAYA PATRA FOUNDATION, KANPUR</td></tr>
+    <tr class="item-header">
+      <td colspan="2">${i1Name}</td>
+      <td>${i2Name}</td>
+    </tr>
+    <tr>
+      <td colspan="2" class="photo-cell">${photoTag(photoData.item1, i1Name)}</td>
+      <td class="photo-cell">${col2PhotoCell}${extraNote}</td>
+    </tr>
+    <tr>
+      <td colspan="2" class="label-cell">DATE</td>
+      <td class="value-cell">${date}</td>
+    </tr>
+    <tr>
+      <td colspan="2" class="label-cell">MENU</td>
+      <td class="value-cell">${menu}</td>
+    </tr>
+    ${attendanceRow}
+    <tr>
+      <td colspan="2" class="label-cell">PROJECTED MEAL COUNT</td>
+      <td class="value-cell">${proj}</td>
+    </tr>
+    <tr>
+      <td colspan="2" class="label-cell">PS</td>
+      <td class="value-cell">${ps}</td>
+    </tr>
+    <tr>
+      <td colspan="2" class="label-cell">UPS</td>
+      <td class="value-cell">${ups}</td>
+    </tr>
+    <tr>
+      <td colspan="2" class="label-cell">TOTAL NO. OF SCHOOL</td>
+      <td class="value-cell">${schools}</td>
+    </tr>
+    <tr class="caul-header"><td colspan="3">NUMBER OF CAULDRON</td></tr>
+    ${caulRows}
+  `;
+}
+
+function render(){
+  document.getElementById('reportA').innerHTML = buildReportHTML(true);
+  document.getElementById('reportB').innerHTML = buildReportHTML(false);
+}
+
+// ---------- export ----------
+function downloadPNG(elId, filename){
+  const el = document.getElementById(elId);
+  html2canvas(el, {scale:2, backgroundColor:'#ffffff'}).then(canvas=>{
+    const link = document.createElement('a');
+    link.download = filename + '.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  });
+}
+
+function downloadPDF(elId, filename){
+  const el = document.getElementById(elId);
+  html2canvas(el, {scale:2, backgroundColor:'#ffffff'}).then(canvas=>{
+    const imgData = canvas.toDataURL('image/png');
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({
+      orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
+      unit: 'px',
+      format: [canvas.width, canvas.height]
+    });
+    pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+    pdf.save(filename + '.pdf');
+  });
+}
+
+// default date = today, initial render
+document.getElementById('reportDate').value = new Date().toISOString().slice(0,10);
+render();
+</script>
+
+</body>
+</html>
